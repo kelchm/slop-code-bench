@@ -36,6 +36,7 @@ from slop_code.common.llms import APIPricing
 from slop_code.common.llms import ModelDefinition
 from slop_code.common.llms import ThinkingPreset
 from slop_code.execution import Session
+from slop_code.execution.live_trace import LiveTrace
 from slop_code.execution.runtime import RuntimeEvent
 from slop_code.logging import get_logger
 
@@ -222,6 +223,10 @@ class Agent(ABC):
         self.pricing = pricing
         self.verbose = verbose
         self.prior_cost = 0.0
+        # Optional live-trace sink attached by the runner; runtime output is
+        # teed automatically, this is for in-process agents (mini_swe) and
+        # lifecycle notes. Use emit_live(), which no-ops when unset.
+        self.live_trace: LiveTrace | None = None
 
     @classmethod
     def from_config(
@@ -379,6 +384,11 @@ class Agent(ABC):
         proper cleanup of any resources (environments, connections, etc.).
         """
 
+    def emit_live(self, kind: str, **fields) -> None:
+        """Emit a live-trace record if tracing is enabled (no-op otherwise)."""
+        if self.live_trace is not None:
+            self.live_trace.emit(kind, **fields)
+
     def hit_net_rate_limit(self) -> bool:
         """Check if the agent has hit a rate limit.
 
@@ -421,6 +431,11 @@ class Agent(ABC):
                     retry_attempt=attempt,
                     max_retries=self.cost_limits.max_retries,
                     exc_info=True,
+                )
+                self.emit_live(
+                    "note",
+                    text=f"agent error (attempt {attempt + 1}/{max_attempts}): "
+                    f"{str(e)[:500]}",
                 )
                 if attempt < max_attempts - 1:
                     continue

@@ -25,6 +25,7 @@ from typing import Literal
 
 import structlog
 
+from slop_code.execution.live_trace import LiveTrace
 from slop_code.execution.runtime import RuntimeEvent
 from slop_code.execution.runtime import RuntimeResult
 
@@ -89,6 +90,7 @@ def process_stream(
     timeout: float | None,
     poll_fn: Callable[[], int | None],
     yield_only_after: str | None = None,
+    live_trace: LiveTrace | None = None,
 ) -> Generator[RuntimeEvent, None, RuntimeResult]:
     logger.debug("Starting to consume events with timeout", timeout=timeout)
     start_time = time.monotonic()
@@ -125,6 +127,8 @@ def process_stream(
                 payload = stdout
 
             if yielding_stdout and payload.strip():
+                if live_trace is not None:
+                    live_trace.raw("stdout", payload)
                 yield RuntimeEvent(kind="stdout", text=payload)
             return
 
@@ -140,6 +144,8 @@ def process_stream(
                 payload = stderr
 
             if yielding_stderr and payload.strip():
+                if live_trace is not None:
+                    live_trace.raw("stderr", payload)
                 yield RuntimeEvent(kind="stderr", text=payload)
             return
 
@@ -191,6 +197,15 @@ def process_stream(
     exit_code = exit_code or poll_fn()
     if exit_code is None:
         exit_code = -1
+    if live_trace is not None:
+        live_trace.flush_raw()
+        live_trace.emit(
+            "exec",
+            event="finished",
+            exit_code=exit_code,
+            elapsed=round(elapsed, 2),
+            timed_out=timed_out,
+        )
     logger.debug(
         "Setup stdout", setup_stdout=setup_stdout, setup_stderr=setup_stderr
     )

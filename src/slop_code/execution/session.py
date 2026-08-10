@@ -21,6 +21,7 @@ from typing import Any
 from slop_code.execution.assets import ResolvedStaticAsset
 from slop_code.execution.file_ops import InputFile
 from slop_code.execution.file_ops import materialize_input_files
+from slop_code.execution.live_trace import LiveTrace
 from slop_code.execution.models import EnvironmentSpec
 from slop_code.execution.placeholders import resolve_static_placeholders
 from slop_code.execution.protocols import ExecRuntime
@@ -74,6 +75,9 @@ class Session:
         self._streaming_runtimes: list[StreamingRuntime] = []
         self._exec_runtimes: list[ExecRuntime] = []
         self.is_agent_infer = is_agent_infer
+        # Optional live-trace sink; propagated to streaming runtimes so agent
+        # output can be watched mid-run (see execution/live_trace.py).
+        self.live_trace: LiveTrace | None = None
 
     def spawn(
         self,
@@ -117,6 +121,7 @@ class Session:
             **runtime_kwargs,
         )
 
+        runtime.live_trace = self.live_trace
         self._streaming_runtimes.append(runtime)
         return runtime
 

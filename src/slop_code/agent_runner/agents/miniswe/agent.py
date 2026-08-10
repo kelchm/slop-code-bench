@@ -522,6 +522,12 @@ class MiniSWEAgent(Agent):
                 timestamp=datetime.now(),
             )
         )
+        self.emit_live(
+            "tool",
+            tool="bash",
+            command=command[:2000],
+            result=observation[:2000],
+        )
         self.add_message("user", observation)
 
     def parse_action(self, response: dict) -> dict:
@@ -726,6 +732,12 @@ class MiniSWEAgent(Agent):
         )
 
         self._steps.append(step)
+        self.emit_live(
+            "model",
+            step=self.usage.steps,
+            cost=round(self.usage.cost, 4),
+            content=step.content[:2000],
+        )
         self.add_message(
             "assistant", content=step.content, reasoning=query.get("reasoning")
         )

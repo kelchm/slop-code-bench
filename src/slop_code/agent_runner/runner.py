@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 import time
@@ -31,12 +32,17 @@ from slop_code.execution import EnvironmentSpec
 from slop_code.execution import Session
 from slop_code.execution import SnapshotDiff
 from slop_code.execution import resolve_static_assets
+from slop_code.execution.live_trace import LIVE_TRACE_FILENAME
+from slop_code.execution.live_trace import LiveTrace
 from slop_code.logging import get_logger
 from slop_code.metrics import SnapshotQualityReport
 from slop_code.metrics import measure_snapshot_quality
 from slop_code.metrics.quality_io import save_quality_metrics
 
 logger = get_logger(__name__)
+
+# Emit a live-trace heartbeat after this many seconds without agent activity.
+HEARTBEAT_IDLE_SECONDS = 30.0
 
 
 class AgentRunnerError(Exception):
@@ -461,6 +467,7 @@ class AgentRunner:
 
         # State to be populated during execution
         self._session: Session | None = None
+        self.live_trace: LiveTrace | None = None
         self.metrics_tracker: MetricsTracker = MetricsTracker(
             current_checkpoint="INIT",
             state=AgentStateEnum.INITIALIZED,
@@ -496,6 +503,20 @@ class AgentRunner:
 
         # Setup output directory
         reporting.setup_run_output_directory(self.run_spec, self.output_path)
+
+        # Live trace for watching the run mid-checkpoint (tail -F or
+        # `slop-code watch`). SLOP_CODE_NO_LIVE_TRACE=1 is the kill switch.
+        if not os.environ.get("SLOP_CODE_NO_LIVE_TRACE"):
+            self.live_trace = LiveTrace(self.output_path / LIVE_TRACE_FILENAME)
+            self.live_trace.emit(
+                "run",
+                event="start",
+                problem=self.run_spec.problem.name,
+                agent=self.run_spec.agent_type,
+                model=self.run_spec.model_name,
+                resuming=is_resuming,
+            )
+        self.agent.live_trace = self.live_trace
 
         # Initialize metrics tracker
         resume_info = self.resume_info
@@ -547,6 +568,7 @@ class AgentRunner:
             problem_config=self.run_spec.problem,
             environment_spec=self.run_spec.environment,
         )
+        self._session.live_trace = self.live_trace
         self._session.__enter__()
 
         # Materialize assets: fresh runs do it explicitly, resume does it in restore_from_snapshot_dir
@@ -570,6 +592,7 @@ class AgentRunner:
                 self.metrics_tracker,
                 self.progress_queue,
                 self.run_spec.problem.name,
+                self.live_trace,
             ),
             daemon=True,
         )
@@ -664,6 +687,14 @@ class AgentRunner:
     def finish(self) -> dict[str, Any]:
         """Cleanup agent, stop monitoring, save final results."""
         logger.debug("Finishing agent run", problem=self.run_spec.problem.name)
+
+        if self.live_trace is not None:
+            self.live_trace.emit(
+                "run",
+                event="end",
+                state=self.metrics_tracker.state.value,
+            )
+            self.live_trace.close()
 
         # Cleanup agent
         self.agent.cleanup()
@@ -1063,6 +1094,14 @@ class AgentRunner:
 
             self.metrics_tracker.current_checkpoint = checkpoint.name
             self.metrics_tracker.checkpoint_started = datetime.now()
+            if self.live_trace is not None:
+                self.live_trace.emit(
+                    "checkpoint",
+                    event="start",
+                    name=checkpoint.name,
+                    index=idx + 1,
+                    total=len(self.run_spec.problem.checkpoints),
+                )
 
             try:
                 summary = self._run_checkpoint(
@@ -1080,6 +1119,16 @@ class AgentRunner:
                 raise
             results.append(summary)
             self.metrics_tracker.finish_checkpoint(self.agent.usage)
+            if self.live_trace is not None:
+                self.live_trace.emit(
+                    "checkpoint",
+                    event="end",
+                    name=checkpoint.name,
+                    passed_policy=summary.passed_policy,
+                    had_error=summary.had_error,
+                    steps=self.agent.usage.steps,
+                    cost=round(self.agent.usage.cost, 4),
+                )
 
             logger.info(
                 "Checkpoint finished",
@@ -1141,21 +1190,24 @@ def agent_progress_watcher(
     metrics_tracker: MetricsTracker,
     progress_queue: queue.Queue,
     problem_name: str,
+    live_trace: LiveTrace | None = None,
 ) -> None:
     """Watch agent progress and report to a queue.
 
     Monitors agent state and puts progress updates into the queue
-    until the agent reaches a terminal state.
+    until the agent reaches a terminal state. When a live trace is
+    provided, usage changes and idle heartbeats are also emitted there.
 
     Args:
         agent: Agent wrapper to monitor
         progress_queue: Queue for progress updates
         problem_name: Name of the problem being solved
-        current_checkpoint_name: Mutable list containing current checkpoint name
+        live_trace: Optional live trace to emit usage/heartbeat records to
     """
     logger.debug("Starting agent progress watcher", problem=problem_name)
     prev_cost = prev_steps = prev_tokens = prev_net_tokens = None
     prev_state = AgentStateEnum.PENDING
+    last_change = last_heartbeat = time.monotonic()
     while True:
         if (
             prev_cost == agent.usage.cost
@@ -1164,6 +1216,18 @@ def agent_progress_watcher(
             and prev_net_tokens == agent.usage.net_tokens
             and prev_state == metrics_tracker.state
         ):
+            now = time.monotonic()
+            if (
+                live_trace is not None
+                and now - last_change >= HEARTBEAT_IDLE_SECONDS
+                and now - last_heartbeat >= HEARTBEAT_IDLE_SECONDS
+            ):
+                live_trace.emit(
+                    "heartbeat",
+                    idle_s=round(now - last_change, 1),
+                    state=metrics_tracker.state.value,
+                )
+                last_heartbeat = now
             threading.Event().wait(0.25)
             continue
         prev_cost = agent.usage.cost
@@ -1172,6 +1236,17 @@ def agent_progress_watcher(
         prev_net_tokens = agent.usage.net_tokens
 
         prev_state = metrics_tracker.state
+        last_change = last_heartbeat = time.monotonic()
+        if live_trace is not None:
+            live_trace.emit(
+                "usage",
+                steps=prev_steps,
+                cost=round(prev_cost, 4),
+                state=prev_state.value,
+                tokens_in=prev_tokens.input,
+                tokens_out=prev_tokens.output,
+                net_tokens=prev_net_tokens.total,
+            )
         progress_queue.put(
             (
                 problem_name,

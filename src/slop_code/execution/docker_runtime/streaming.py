@@ -424,12 +424,15 @@ class DockerStreamingRuntime(StreamingRuntime):
             timeout=timeout,
             verbose=True,
         )
+        if self.live_trace is not None:
+            self.live_trace.emit("exec", event="start", command=command[:500])
 
         result = yield from process_stream(
             stream,
             timeout,
             lambda: self.poll(),
             yield_only_after=SPLIT_STRING if not self._disable_setup else None,
+            live_trace=self.live_trace,
         )
 
         if result.timed_out:

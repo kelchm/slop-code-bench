@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from slop_code.execution.assets import ResolvedStaticAsset
+from slop_code.execution.live_trace import LiveTrace
 from slop_code.execution.models import EnvironmentSpec
 from slop_code.execution.runtime import RuntimeEvent
 from slop_code.execution.runtime import RuntimeResult
@@ -31,6 +32,10 @@ class StreamingRuntime(ABC):
     - Real-time output streaming via RuntimeEvent iterator
     - No stdin support (use ExecRuntime for stdin)
     """
+
+    # Optional live-trace sink attached by Session.spawn(); stream()
+    # implementations tee agent output through it when set.
+    live_trace: LiveTrace | None = None
 
     @abstractmethod
     def stream(

@@ -190,9 +190,13 @@ class LocalStreamingRuntime(StreamingRuntime):
             timeout=timeout,
             verbose=True,
         )
+        if self.live_trace is not None:
+            self.live_trace.emit("exec", event="start", command=command[:500])
 
         stream = self._create_demuxed_stream(proc)
-        result = yield from process_stream(stream, timeout, self.poll)
+        result = yield from process_stream(
+            stream, timeout, self.poll, live_trace=self.live_trace
+        )
 
         # Kill process if it timed out
         if result.timed_out:
