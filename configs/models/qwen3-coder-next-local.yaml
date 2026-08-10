@@ -1,0 +1,31 @@
+internal_name: qwen3-coder-next-local
+# Served locally by mlx_lm.server; no real credential is used, but litellm
+# requires a non-empty api_key, so the `local` provider supplies a placeholder.
+provider: local
+
+# Local inference is free. Note that AgentCostLimits treats 0 as "no limit",
+# so cost-based stopping is inert here -- bound runs with step_limit and the
+# agent timeout instead.
+pricing:
+  input: 0
+  output: 0
+  cache_read: 0
+  cache_write: 0
+
+aliases:
+  - qwen3-coder-next
+  - Qwen3-Coder-Next
+
+# Qwen3-Next architecture (hybrid linear attention, 2 KV heads, 512 experts),
+# 4-bit MLX quant, ~42 GB of weights. Advertises 262144 max_position_embeddings.
+thinking: none
+
+agent_specific:
+  mini_swe:
+    # mlx_lm.server resolves the request's `model` field as a path or HF repo
+    # id, so the full local path is required -- a short alias 404s against HF.
+    model_name: openai//Users/kelchm/.lmstudio/models/lmstudio-community/Qwen3-Coder-Next-MLX-4bit
+    model_class: litellm
+    # Use the literal IPv4 address, not "localhost": the server binds 127.0.0.1
+    # only, and httpx may try ::1 first.
+    api_base: http://127.0.0.1:8081/v1

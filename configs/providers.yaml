@@ -152,6 +152,27 @@ providers:
     env_var: KIMI_API_KEY
     description: Kimi API key for direct kimi.com coding endpoint
 
+  local:
+    type: env_var
+    env_var: LOCAL_API_KEY
+    description: >-
+      Placeholder key for locally-served OpenAI-compatible endpoints
+      (mlx_lm.server, llama-server, ollama, LM Studio). Local servers do not
+      authenticate, but litellm requires a non-empty key, so set
+      LOCAL_API_KEY to any value (e.g. "local").
+    # This endpoint is for containerised agents (opencode, claude_code, ...),
+    # which reach the host's model server via host.docker.internal. Verified:
+    # colima forwards that name to the host loopback, so ollama's default
+    # 127.0.0.1 bind is reachable from a container with no extra exposure.
+    #
+    # Host-side agents (mini_swe runs inference in the host process) must NOT
+    # use this; they set agent_specific.mini_swe.api_base to 127.0.0.1
+    # directly, which takes precedence over any endpoint.
+    endpoints:
+      openai:
+        api_base: http://host.docker.internal:11434/v1
+        api_format: openai
+
   # File-based providers
   codex_auth:
     type: file

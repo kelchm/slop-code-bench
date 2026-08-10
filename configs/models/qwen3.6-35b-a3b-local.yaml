@@ -1,0 +1,61 @@
+internal_name: qwen3.6-35b-a3b-local
+# Served locally by ollama; no real credential is used, but litellm requires a
+# non-empty api_key, so the `local` provider supplies a placeholder.
+provider: local
+
+# Local inference is free. Note that AgentCostLimits treats 0 as "no limit",
+# so cost-based stopping is inert here -- bound runs with step_limit and the
+# agent timeout instead.
+pricing:
+  input: 0
+  output: 0
+  cache_read: 0
+  cache_write: 0
+
+aliases:
+  - qwen3.6-35b-a3b
+
+# The model id agents send to the server. internal_name carries a `-local`
+# suffix to distinguish the catalog entry, but ollama knows the model as
+# `qwen3.6-35b-a3b`, and get_model_slug() resolves provider_slugs before
+# falling back to internal_name.
+provider_slugs:
+  local: qwen3.6-35b-a3b
+
+# Served by ollama; build it with
+#   ollama create qwen3.6-35b-a3b -f configs/serving/ollama/qwen3.6-35b-a3b.Modelfile
+# which pins num_ctx to 131072. Do not lower that: ollama returns HTTP 400
+# (exceed_context_size_error) rather than truncating, so an undersized window
+# kills a checkpoint outright once the conversation outgrows it.
+#
+# This is a reasoning model: it emits a `reasoning` field before `content`, so
+# generation budgets must be generous or `content` arrives empty and the
+# scaffold's bash-block parser fails.
+thinking: none
+
+agent_specific:
+  mini_swe:
+    model_name: openai/qwen3.6-35b-a3b
+    model_class: litellm
+    # mini_swe calls the model from the host process, so it reaches ollama
+    # directly. Literal IPv4, not "localhost": httpx may try ::1 first.
+    api_base: http://127.0.0.1:11434/v1
+
+  # opencode runs inside the submission container, so it resolves the model
+  # server through the `local` provider's endpoint (host.docker.internal).
+  # `local` is not a provider opencode knows, so it is declared here as a
+  # generic OpenAI-compatible provider; the image already ships
+  # @ai-sdk/openai-compatible. The agent injects options.baseURL from the
+  # endpoint at runtime.
+  opencode:
+    endpoint: openai
+    provider_name: local
+    config:
+      "$schema": "https://opencode.ai/config.json"
+      provider:
+        local:
+          npm: "@ai-sdk/openai-compatible"
+          name: "Local (ollama)"
+          models:
+            qwen3.6-35b-a3b:
+              name: "Qwen3.6-35B-A3B (Q4_K_M, 128K ctx)"

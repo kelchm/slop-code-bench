@@ -1,0 +1,26 @@
+# Serving definition for Qwen3.6-35B-A3B (Q4_K_M) under ollama.
+#
+# Build with:
+#   ollama create qwen3.6-35b-a3b -f configs/serving/ollama/qwen3.6-35b-a3b.Modelfile
+#
+# FROM points at a GGUF already on disk (downloaded via LM Studio). The path is
+# machine-specific; change it to wherever the quant lives. The file is
+# Qwen3.6-35B-A3B-Q4_K_M.gguf (~21 GB) from the lmstudio-community repo.
+FROM /Users/kelchm/.lmstudio/models/lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf
+
+# 128K context. Sizing rationale:
+#   - The model's native window is 262144, so this is well inside it; models
+#     typically degrade before their advertised maximum.
+#   - mini_swe resends the whole conversation each turn, so context grows
+#     linearly with steps. A 64K window was exhausted partway through
+#     dag_execution checkpoint_2 (ollama returns HTTP 400
+#     exceed_context_size_error rather than truncating, which kills the run).
+#   - KV cost is ~40 KB/token (40 layers x 2 KV heads x 128 head_dim x 2 bytes
+#     x 2 for K and V), so 128K is ~5.4 GB on top of ~21 GB of weights. That
+#     leaves comfortable headroom alongside colima's 16 GB VM on a 64 GB
+#     machine -- a 42 GB model plus caches previously exhausted memory and
+#     panicked the kernel.
+PARAMETER num_ctx 131072
+
+# Deterministic runs for benchmark comparability.
+PARAMETER temperature 0
