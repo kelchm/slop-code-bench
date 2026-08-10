@@ -24,6 +24,7 @@ commands.eval_problem_dir.register(app, "eval-problem")
 commands.eval_checkpoint.register(app, "eval-snapshot")
 commands.infer_problem.register(app, "infer-problem")
 commands.sync.register(app, "sync")
+commands.watch.register(app, "watch")
 
 utils_app = typer.Typer(
     help="Utilities and other similar commands.",

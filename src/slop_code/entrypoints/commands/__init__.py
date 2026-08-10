@@ -21,3 +21,4 @@ from slop_code.entrypoints.commands import sync
 from slop_code.entrypoints.commands import tools
 from slop_code.entrypoints.commands import variance
 from slop_code.entrypoints.commands import viz
+from slop_code.entrypoints.commands import watch
