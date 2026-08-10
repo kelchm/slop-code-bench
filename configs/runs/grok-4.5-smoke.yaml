@@ -1,0 +1,37 @@
+# Smoke test: grok-4.5 via the Grok CLI on one 4-checkpoint problem.
+#
+# Prerequisites on macOS + colima:
+#   export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+#   export TMPDIR=$HOME/.cache/scbench/tmp   # only $HOME is shared into the VM
+#
+#   uv run slop-code run --config configs/runs/grok-4.5-smoke.yaml --num-workers 1
+agent:
+  type: grok_cli
+  binary: grok
+  version: 1.0.0
+  timeout: 3600
+  disable_web_search: true
+  disable_subagents: false
+  sync_auth_back: false
+  extra_args:
+    - --no-auto-update
+  env: {}
+  cost_limits:
+    cost_limit: 5 # per checkpoint; well under the 20 used for full runs
+    step_limit: 250
+    net_cost_limit: 0
+
+environment: docker-python3.12-uv
+prompt: just-solve
+
+model:
+  provider: grok_auth
+  name: grok-4.5
+
+thinking: high
+pass_policy: any
+
+problems:
+  - file_backup
+
+save_dir: outputs

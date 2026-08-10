@@ -1,0 +1,38 @@
+internal_name: grok-4.5
+# Default to the Grok CLI's OIDC session credentials (~/.grok/auth.json).
+# Run with `--model xai/grok-4.5` instead to bill an XAI_API_KEY directly.
+provider: grok_auth
+
+# Matches what the CLI itself reports in result.total_cost_usd: input tokens
+# are billed on top of cache reads, and prompts over 200k context double.
+pricing:
+  # Top-level rates are the over-200k tier; the tier below covers normal prompts.
+  input: 4.00
+  output: 12.00
+  cache_read: 0.60
+  cache_write: 0
+  prompt_tiers:
+    - max_input_tokens: 200000
+      input: 2.00
+      output: 6.00
+      cache_read: 0.30
+      cache_write: 0
+
+aliases:
+  - grok-4.5
+  - x-ai/grok-4.5
+
+provider_slugs:
+  openrouter: x-ai/grok-4.5
+
+# Grok 4.5 is a reasoning model; high is the CLI's own default.
+thinking: high
+
+agent_specific:
+  grok_cli:
+    model_name: grok-4.5
+  mini_swe:
+    model_name: x-ai/grok-4.5
+    model_class: openrouter
+  opencode:
+    provider_name: xai

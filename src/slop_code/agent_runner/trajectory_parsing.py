@@ -66,6 +66,7 @@ def parse_trajectory(artifact_dir: Path) -> Trajectory:
     from slop_code.agent_runner.agents.codex.parser import CodexParser
     from slop_code.agent_runner.agents.cursor_cli.parser import CursorCliParser
     from slop_code.agent_runner.agents.gemini.parser import GeminiParser
+    from slop_code.agent_runner.agents.grok_cli.parser import GrokCliParser
     from slop_code.agent_runner.agents.kimi_cli.parser import KimiCliParser
     from slop_code.agent_runner.agents.miniswe.parser import MinisweParser
     from slop_code.agent_runner.agents.opencode.parser import OpenCodeParser
@@ -93,6 +94,7 @@ def parse_trajectory(artifact_dir: Path) -> Trajectory:
     # More specific formats first, broader formats last
     parsers = [
         CursorCliParser,
+        GrokCliParser,  # Before ClaudeCodeParser: same wire format, grok model id
         ClaudeCodeParser,
         CodexParser,
         OpenCodeParser,

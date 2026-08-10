@@ -167,3 +167,8 @@ providers:
     type: file
     file_path: ~/.gemini/oauth_creds.json
     description: Gemini CLI OAuth credentials file
+
+  grok_auth:
+    type: file
+    file_path: ~/.grok/auth.json
+    description: Grok CLI OIDC session credentials file

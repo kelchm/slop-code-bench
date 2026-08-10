@@ -15,6 +15,8 @@ from slop_code.agent_runner.agents.cursor_cli import CursorCliAgent
 from slop_code.agent_runner.agents.cursor_cli import CursorCliConfig
 from slop_code.agent_runner.agents.gemini import GeminiAgent
 from slop_code.agent_runner.agents.gemini import GeminiConfig
+from slop_code.agent_runner.agents.grok_cli import GrokCliAgent
+from slop_code.agent_runner.agents.grok_cli import GrokCliConfig
 from slop_code.agent_runner.agents.kimi_cli import KimiCliAgent
 from slop_code.agent_runner.agents.kimi_cli import KimiCliConfig
 from slop_code.agent_runner.agents.miniswe import MiniSWEAgent
@@ -47,6 +49,8 @@ __all__ = [
     "CursorCliConfig",
     "GeminiAgent",
     "GeminiConfig",
+    "GrokCliAgent",
+    "GrokCliConfig",
     "KimiCliAgent",
     "KimiCliConfig",
     "MiniSWEAgent",

@@ -1,0 +1,20 @@
+FROM {{ base_image }}
+
+# --- Install Grok CLI (static binary from x.ai) ------------------------------
+# The published artifact name is grok-<version>-<os>-<arch>; the arch token
+# matches uname -m on both aarch64 and x86_64.
+USER root
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    curl -fsSL "https://x.ai/cli/grok-{{ version }}-linux-${arch}" -o /usr/local/bin/grok; \
+    chmod 0755 /usr/local/bin/grok; \
+    /usr/local/bin/grok --version
+
+# --- Switch to non-root ------------------------------------------------------
+USER agent
+WORKDIR /workspace
+
+ENV XDG_CONFIG_HOME="$HOME/.config"
+ENV XDG_DATA_HOME="$HOME/.local/share"
+
+CMD ["grok"]

@@ -1,0 +1,30 @@
+# Agent config for the Grok CLI (https://x.ai/cli).
+#
+# Authentication uses the OIDC session in ~/.grok/auth.json rather than an API
+# key: a minimal copy of that file is staged and mounted into the container's
+# home. Run `grok login` on the host first.
+#
+# The session access token is short-lived (~6h) and refreshed in-container
+# against the staged copy. For runs long enough to outlive the host token, set
+# sync_auth_back: true AND keep --num-workers 1, so refreshes persist without
+# racing between workers.
+type: grok_cli
+binary: grok
+
+# Release published at https://x.ai/cli/grok-<version>-linux-<arch>.
+version: 1.0.0
+
+timeout: 7200 # seconds per checkpoint
+max_turns: # unset: let cost_limits bound the run instead
+disable_web_search: true # keep runs reproducible and offline-ish
+disable_subagents: false # subagents are part of how grok normally works
+grok_home: # defaults to the parent of the resolved credential file (~/.grok)
+sync_auth_back: false
+extra_args:
+  - --no-auto-update
+env: {}
+
+cost_limits:
+  cost_limit: 20
+  step_limit: 250
+  net_cost_limit: 0

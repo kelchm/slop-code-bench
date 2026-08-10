@@ -40,6 +40,7 @@ Implementing a new agent? See:
 | [MiniSWE](agents/miniswe.md) | Lightweight bash-based agent |
 | [OpenCode](agents/opencode.md) | OpenCode CLI agent |
 | [Gemini](agents/gemini.md) | Google's Gemini CLI agent |
+| [Grok CLI](agents/grok-cli.md) | xAI's Grok CLI agent (OIDC session auth) |
 | [OpenHands](agents/openhands.md) | OpenHands framework agent |
 
 ## Core Concepts
