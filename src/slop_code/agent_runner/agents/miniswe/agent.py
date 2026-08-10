@@ -7,6 +7,7 @@ import re
 import subprocess
 import time
 import typing as tp
+from datetime import datetime
 from pathlib import Path
 
 from jinja2 import StrictUndefined
@@ -17,8 +18,10 @@ from slop_code.agent_runner.agent import AgentConfigBase
 from slop_code.agent_runner.credentials import ProviderCredential
 from slop_code.agent_runner.models import AgentCostLimits
 from slop_code.agent_runner.registry import register_agent
-from slop_code.agent_runner.trajectory import StepRole
+from slop_code.agent_runner.trajectory import AgentStep
+from slop_code.agent_runner.trajectory import ToolUseStep
 from slop_code.agent_runner.trajectory import TrajectoryStep
+from slop_code.agent_runner.trajectory import UserStep
 from slop_code.common.llms import APIPricing
 from slop_code.common.llms import ModelDefinition
 from slop_code.common.llms import ThinkingPreset
@@ -316,7 +319,7 @@ class MiniSWEAgent(Agent):
         self.action_observation_template = action_observation_template
 
         self._finished = False
-        self._steps = []
+        self._steps: list[TrajectoryStep] = []
         self._messages = []
         self.extra_template_vars = {}
         self._env: DockerEnvironment | LocalEnvironment | None = None
@@ -494,10 +497,12 @@ class MiniSWEAgent(Agent):
 
     def get_observation(self, response: dict):
         """Execute the action and return the observation."""
-        t0 = time.time()
         output = {}
+        command = ""
         try:
-            output = self.execute_action(self.parse_action(response))
+            action = self.parse_action(response)
+            command = action["action"]
+            output = self.execute_action(action)
             observation = self.render_template(
                 self.action_observation_template, output=output
             )
@@ -508,14 +513,16 @@ class MiniSWEAgent(Agent):
             observation = str(e)
             if isinstance(e, miniswe_default.TerminatingException):
                 self._finished = True
-        finally:
-            wall_clock_time = time.time() - t0
-        self.record_non_agent_step(
-            role=StepRole.ENVIRONMENT,
-            content=observation,
-            wall_clock_time=wall_clock_time,
-            meta=output,
+        # The scaffold's only tool is bash, so observations are tool results.
+        self._steps.append(
+            ToolUseStep(
+                type="bash",
+                arguments={"command": command},
+                result=observation,
+                timestamp=datetime.now(),
+            )
         )
+        self.add_message("user", observation)
 
     def parse_action(self, response: dict) -> dict:
         """Parse the action from the message. Returns the action."""
@@ -625,20 +632,16 @@ class MiniSWEAgent(Agent):
             f"Unsupported environment spec type: {env_spec.type!r}"
         )
 
-    def record_non_agent_step(
-        self, role: StepRole, content: str, wall_clock_time: float, **kwargs
-    ):
+    def record_non_agent_step(self, role: str, content: str) -> None:
+        """Record a system or user message as both a step and a chat message.
+
+        The trajectory schema has no distinct system step, so both roles are
+        recorded as ``UserStep``; only the chat message keeps the distinction.
+        """
         self._steps.append(
-            TrajectoryStep(
-                role=role,
-                content=content,
-                wall_clock_time=wall_clock_time,
-                **kwargs,
-            )
+            UserStep(content=content, timestamp=datetime.now())
         )
-        self.add_message(
-            "system" if role == StepRole.SYSTEM else "user", content
-        )
+        self.add_message("system" if role == "system" else "user", content)
 
     def agent_step(self) -> dict | None:
         if self.cost_limits.is_above_limits(
@@ -679,7 +682,9 @@ class MiniSWEAgent(Agent):
             )
             self.log.exception(e, exc_info=True)
             return None
-        wall_clock_time = time.time() - t0
+        self.log.debug(
+            "Model query complete", seconds=round(time.time() - t0, 2)
+        )
 
         response_dict = query.get("extra", {})
         cache_read_tokens = cache_write_tokens = reasoning_tokens = None
@@ -711,13 +716,9 @@ class MiniSWEAgent(Agent):
         if self.pricing is not None:
             step_cost = self.pricing.get_cost(token_usage)
 
-        step = TrajectoryStep(
-            role=StepRole.ASSISTANT,
-            content=query["content"],
-            wall_clock_time=wall_clock_time,
-            cost=step_cost,
-            tokens=token_usage,
-            meta=query["extra"],
+        # Cost and token usage are tracked on self.usage, not on the step.
+        step = AgentStep(
+            content=query["content"], timestamp=datetime.now()
         )
         self.usage.step(
             cost=step_cost,
@@ -741,15 +742,11 @@ class MiniSWEAgent(Agent):
             self.log.debug("Adding system message")
             system_content = self.render_template(self.system_template)
             self.record_non_agent_step(
-                role=StepRole.SYSTEM,
-                content=system_content,
-                wall_clock_time=0.0,
+                role="system", content=system_content
             )
 
         task_content = self.render_template(self.instance_template)
-        self.record_non_agent_step(
-            role=StepRole.USER, content=task_content, wall_clock_time=0.0
-        )
+        self.record_non_agent_step(role="user", content=task_content)
 
         while not self._finished:
             try:
